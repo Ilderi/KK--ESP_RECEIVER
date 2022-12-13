@@ -1,14 +1,13 @@
 
 #include <string.h>
+#include <ESP8266WiFi.h>
+#include <espnow.h>
+#include <EEPROM.h>
 
 //#define RELEASE
 #ifndef RELEASE
 #define DEBUG
 #endif
-
-#define MESH_PREFIX "LOCAL_MESH"
-#define MESH_PASSWORD "LOCALMESHMOTHERFUCKER"
-#define MESH_PORT 2137
 
 //variable definitions
 #define CMD_ENTER_CONFIG "CEDIT"
@@ -17,6 +16,7 @@
 #define FOO_ERROR 0
 #define EZ_COUNT 6
 #define REL_COUNT 1
+#define EEPROM_SIZE 12
 
 //pins definitions
 #define PIN_EZ1 5
@@ -29,6 +29,13 @@
 #define PIN_LED 2
 
 //typedef
+struct millis_timer {
+  uint8_t active_flag;
+  unsigned long programmed_time;
+  unsigned long start_time;
+  unsigned long elapsed_time;
+} typdef millis_timer;
+
 struct ez {
 
 } typedef EZ;
@@ -37,11 +44,22 @@ struct rel {
 
 } typedef REL;
 
-  //file scope variables
-  static const uint8_t EZ_Pins[] = { PIN_EZ1, PIN_EZ2, PIN_EZ3, PIN_EZ4, PIN_EZ5, PIN_EZ6 };
+typedef struct struct_message {
+  uint8_t cmd;
+  uint8_t data;
+} struct_meessage;
+
+//file scope variables
+static const uint8_t EZ_Pins[] = { PIN_EZ1, PIN_EZ2, PIN_EZ3, PIN_EZ4, PIN_EZ5, PIN_EZ6 };
+static struct_message myData;
+static millis_timer buttonActivityTimer;
+static millis_timer menuActivityTimer;
+static millis_timer
 
   //function prototypes
-  uint8_t doAction(uint8_t, uint8_t);
+  void
+  OnDataRecv(uint8_t *mac, uint8_t *incomingData, uint8_t len);
+uint8_t doAction(uint8_t, uint8_t);
 uint8_t activateEZ(uint8_t);
 uint8_t deactivateEZ(uint8_t);
 void activateREL(void);
@@ -50,11 +68,17 @@ void turnOnboardLedOn(void);
 void turnOnboardLedOff(void);
 void initalizeGPIO(void);
 void checkForUserInput(void);
-void checkForPilotMessage(void);
+void initializeData(void);
+void pilotOffSequence(void);
 
 void setup() {
   initalizeGPIO();
   Serial.begin(USB_BAUDRATE);
+  EEPROM.begin(EEPROM_SIZE);
+  WiFi.mode(WIFI_STA);
+  esp_now_init();
+  esp_now_set_self_role(ESP_NOW_ROLE_SLAVE);
+  esp_now_register_recv_cb(OnDataRecv);
 #ifdef DEBUG
   Serial.println("I`m alive");
   Serial.println("I`m alive");
@@ -64,19 +88,54 @@ void setup() {
 
 void loop() {
   checkForUserInput();
-  checkForPilotMessage();
+  if (buttonActivityTimer.active_flag == 1) {
+    buttonActivityTimer.elapsed_time = (millis() - buttonActivityTimer.start_time);
+    if (buttonActivityTimer.elapsed_time >= buttonActivityTimer.programmed_time) {
+      deactivateREL();
+      buttonActivityTimer.active_flag = 0;
+    }
+  }
+}
+
+void OnDataRecv(uint8_t *mac, uint8_t *incomingData, uint8_t len) {
+  memcpy(&myData, incomingData, sizeof(myData));
+  Serial.print("Bytes received: ");
+  Serial.println(len);
+  Serial.print("Command:");
+  Serial.println(myData.cmd);
+  Serial.print("Data:");
+  Serial.println(myData.data);
+  doAction(myData.cmd, myData.data);
 }
 
 uint8_t doAction(uint8_t action_type, uint8_t ez_output_number) {
   uint8_t ret = FOO_OK;
   switch (action_type) {
     case 1:
-      activateREL();
+      buttonActivityTimer.start_time = millis();
+      if (buttonActivityTimer.active_flag != 1) {
+        noInterrupts();
+        activateREL();
+        buttonActivityTimer.active_flag = 1;
+        interrupts();
+      }
       if (activateEZ(ez_output_number) != FOO_OK) ret = FOO_ERROR;
       break;
     case 2:
+      deactivateREL();
+      if (deactivateEZ(ez_output_number) != FOO_OK) ret = FOO_ERROR;
+      break;
+    case 3:
       if (activateEZ(ez_output_number) != FOO_OK) ret = FOO_ERROR;
       if (activateEZ(6) != FOO_OK) ret = FOO_ERROR;
+      break;
+    case 4:
+      //pilot on cmd
+      for()
+      break;
+    case 5:
+      //pilot off cmd
+      pilotOffSequence();
       break;
     default:
       ret = FOO_ERROR;
@@ -94,6 +153,11 @@ uint8_t doAction(uint8_t action_type, uint8_t ez_output_number) {
   return ret;
 }
 
+void pilotOffSequence(void)
+{
+
+}
+
 void initalizeGPIO(void) {
   pinMode(PIN_REL, OUTPUT);
   deactivateREL();
@@ -103,6 +167,14 @@ void initalizeGPIO(void) {
   }
   pinMode(PIN_LED, OUTPUT);
   turnOnboardLedOff();
+}
+
+void initializeData(void) {
+  readConfigFromEEPROM();
+  buttonActivityTimer.active_flag = 0;
+  menuActivityTimer.active_flag = 0;
+  buttonActivityTimer.programmed_time = 1000;
+  menuActivityTimer.programmed_time = 30000;
 }
 
 uint8_t activateEZ(uint8_t EZ_pin_number_to_activate) {
@@ -195,7 +267,8 @@ void checkForUserInput(void) {
         Serial.println("3. Kontrola manualna");
         Serial.println("4. Wyjście z menu konfiguracyjnego");
         uint8_t iterator = 1;
-        while (Serial.available() < 1);
+        while (Serial.available() < 1)
+          ;
         someText = Serial.readString();
         Serial.print(">");
         Serial.print(someText);
@@ -260,13 +333,13 @@ void checkForUserInput(void) {
   }
 }
 
-void checkForPilotMessage(void) {
-}
-
 void readConfigFromEEPROM(void) {
+  //EEPROM.put(addr, param);
+  //EEPROM.commit();
 }
 
 void writeConfigToEEPROM(void) {
+  //EEPROM.get(address, param);
 }
 
 //TODO
@@ -276,3 +349,6 @@ void writeConfigToEEPROM(void) {
 //dodać możliwość wyłączenia diody LED w przekaźniku
 //po wyłączeniu diody LED w ustawieniach przekaźnika ma być niebosługiwana w trybie manualnym
 //dodać zapisywanie do eepromu w menu
+//dodać timer sprawdzający czy przycisk w pilocie jest dalej wciśnięty i czy pompa ma działać --DONE
+//poprawić funkcję init data tak, aby spisywała dane z EEPROM-u
+//dodać możliwość zmiany czasu po jakim mają się wyłączyć elektrozawory
