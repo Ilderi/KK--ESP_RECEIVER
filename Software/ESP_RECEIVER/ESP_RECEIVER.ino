@@ -75,6 +75,7 @@ void pilotOffSequence(void);
 
 void setup() {
   initalizeGPIO();
+  initializeData();
   Serial.begin(USB_BAUDRATE);
   EEPROM.begin(EEPROM_SIZE);
   WiFi.mode(WIFI_STA);
@@ -126,7 +127,7 @@ uint8_t doAction(uint8_t action_type, uint8_t ez_output_number) {
   current_data = ez_output_number;
   switch (action_type) {
     case 1:
-    //Para x przycisk 1 wciśnięty
+      //Para x przycisk 1 wciśnięty
       buttonActivityTimer.start_time = millis();
       if (buttonActivityTimer.active_flag != 1) {
         noInterrupts();
@@ -137,22 +138,28 @@ uint8_t doAction(uint8_t action_type, uint8_t ez_output_number) {
       if (activateEZ(ez_output_number) != FOO_OK) ret = FOO_ERROR;
       break;
     case 2:
-    //Para x przycisk 1 puszczony
+      //Para x przycisk 1 puszczony
       deactivateREL();
       if (deactivateEZ(ez_output_number) != FOO_OK) ret = FOO_ERROR;
+      buttonActivityTimer.active_flag = 0;
       break;
     case 3:
-    //Para x przycisk 2 wciśnięty
-      if (activateEZ(ez_output_number) != FOO_OK) ret = FOO_ERROR;
-      if (activateEZ(6) != FOO_OK) ret = FOO_ERROR;
+      //Para x przycisk 2 wciśnięty
+      button2ActivityTimer.start_time = millis();
+      if (button2ActivityTimer.active_flag != 1) {
+        if (activateEZ(ez_output_number) != FOO_OK) ret = FOO_ERROR;
+        if (activateEZ(6) != FOO_OK) ret = FOO_ERROR;
+        button2ActivityTimer.active_flag = 1;
+      }
       break;
     case 4:
-    //Para x przycisk 2 puszczony
+      //Para x przycisk 2 puszczony
       if (deactivateEZ(ez_output_number) != FOO_OK) ret = FOO_ERROR;
       if (deactivateEZ(6) != FOO_OK) ret = FOO_ERROR;
+      button2ActivityTimer.active_flag = 0;
       break;
     case 5:
-    //pilot on cmd
+      //pilot on cmd
       for (uint8_t i = 0; i < EZ_COUNT; i++) {
         digitalWrite(EZ_Pins[i], LOW);
       }
@@ -206,8 +213,11 @@ void initalizeGPIO(void) {
 void initializeData(void) {
   readConfigFromEEPROM();
   buttonActivityTimer.active_flag = 0;
+  button2ActivityTimer.active_flag = 0;
   menuActivityTimer.active_flag = 0;
+  pilotOffEZTimer.active_flag = 0;
   buttonActivityTimer.programmed_time = 1000;
+  button2ActivityTimer.programmed_time = 1000;
   menuActivityTimer.programmed_time = 30000;
   pilotOffEZTimer.programmed_time = 1800000;  //30 minut;
 }
