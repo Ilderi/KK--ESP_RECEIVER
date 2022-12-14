@@ -29,20 +29,20 @@
 #define PIN_LED 2
 
 //typedef
-struct millis_timer {
+typedef struct millis_timer1 {
   uint8_t active_flag;
   unsigned long programmed_time;
   unsigned long start_time;
   unsigned long elapsed_time;
-} typdef millis_timer;
+} millis_timer;
 
-struct ez {
+typedef struct ez {
 
-} typedef EZ;
+} EZ;
 
-struct rel {
+typedef struct rel {
 
-} typedef REL;
+} REL;
 
 typedef struct struct_message {
   uint8_t cmd;
@@ -52,13 +52,15 @@ typedef struct struct_message {
 //file scope variables
 static const uint8_t EZ_Pins[] = { PIN_EZ1, PIN_EZ2, PIN_EZ3, PIN_EZ4, PIN_EZ5, PIN_EZ6 };
 static struct_message myData;
+static uint8_t current_action;
+static uint8_t current_data;
 static millis_timer buttonActivityTimer;
+static millis_timer button2ActivityTimer;
 static millis_timer menuActivityTimer;
-static millis_timer
+static millis_timer pilotOffEZTimer;
 
-  //function prototypes
-  void
-  OnDataRecv(uint8_t *mac, uint8_t *incomingData, uint8_t len);
+//function prototypes
+void OnDataRecv(uint8_t *mac, uint8_t *incomingData, uint8_t len);
 uint8_t doAction(uint8_t, uint8_t);
 uint8_t activateEZ(uint8_t);
 uint8_t deactivateEZ(uint8_t);
@@ -91,10 +93,20 @@ void loop() {
   if (buttonActivityTimer.active_flag == 1) {
     buttonActivityTimer.elapsed_time = (millis() - buttonActivityTimer.start_time);
     if (buttonActivityTimer.elapsed_time >= buttonActivityTimer.programmed_time) {
-      deactivateREL();
+      doAction(2, current_data);
       buttonActivityTimer.active_flag = 0;
     }
   }
+
+  if (button2ActivityTimer.active_flag == 1) {
+    button2ActivityTimer.elapsed_time = (millis() - button2ActivityTimer.start_time);
+    if (button2ActivityTimer.elapsed_time >= button2ActivityTimer.programmed_time) {
+      doAction(4, current_data);
+      button2ActivityTimer.active_flag = 0;
+    }
+  }
+
+  pilotOffSequence();
 }
 
 void OnDataRecv(uint8_t *mac, uint8_t *incomingData, uint8_t len) {
@@ -110,8 +122,11 @@ void OnDataRecv(uint8_t *mac, uint8_t *incomingData, uint8_t len) {
 
 uint8_t doAction(uint8_t action_type, uint8_t ez_output_number) {
   uint8_t ret = FOO_OK;
+  current_action = action_type;
+  current_data = ez_output_number;
   switch (action_type) {
     case 1:
+    //Para x przycisk 1 wciśnięty
       buttonActivityTimer.start_time = millis();
       if (buttonActivityTimer.active_flag != 1) {
         noInterrupts();
@@ -122,20 +137,32 @@ uint8_t doAction(uint8_t action_type, uint8_t ez_output_number) {
       if (activateEZ(ez_output_number) != FOO_OK) ret = FOO_ERROR;
       break;
     case 2:
+    //Para x przycisk 1 puszczony
       deactivateREL();
       if (deactivateEZ(ez_output_number) != FOO_OK) ret = FOO_ERROR;
       break;
     case 3:
+    //Para x przycisk 2 wciśnięty
       if (activateEZ(ez_output_number) != FOO_OK) ret = FOO_ERROR;
       if (activateEZ(6) != FOO_OK) ret = FOO_ERROR;
       break;
     case 4:
-      //pilot on cmd
-      for()
+    //Para x przycisk 2 puszczony
+      if (deactivateEZ(ez_output_number) != FOO_OK) ret = FOO_ERROR;
+      if (deactivateEZ(6) != FOO_OK) ret = FOO_ERROR;
       break;
     case 5:
+    //pilot on cmd
+      for (uint8_t i = 0; i < EZ_COUNT; i++) {
+        digitalWrite(EZ_Pins[i], LOW);
+      }
+      break;
+    case 6:
       //pilot off cmd
-      pilotOffSequence();
+      for (uint8_t i = 0; i < EZ_COUNT; i++) {
+        digitalWrite(EZ_Pins[i], HIGH);
+      }
+      pilotOffEZTimer.active_flag = 1;
       break;
     default:
       ret = FOO_ERROR;
@@ -153,9 +180,16 @@ uint8_t doAction(uint8_t action_type, uint8_t ez_output_number) {
   return ret;
 }
 
-void pilotOffSequence(void)
-{
-
+void pilotOffSequence(void) {
+  if (pilotOffEZTimer.active_flag == 1) {
+    pilotOffEZTimer.elapsed_time = (millis() - pilotOffEZTimer.start_time);
+    if (pilotOffEZTimer.elapsed_time >= pilotOffEZTimer.programmed_time) {
+      for (uint8_t i = 0; i < EZ_COUNT; i++) {
+        digitalWrite(EZ_Pins[i], LOW);
+      }
+      pilotOffEZTimer.active_flag = 0;
+    }
+  }
 }
 
 void initalizeGPIO(void) {
@@ -175,6 +209,7 @@ void initializeData(void) {
   menuActivityTimer.active_flag = 0;
   buttonActivityTimer.programmed_time = 1000;
   menuActivityTimer.programmed_time = 30000;
+  pilotOffEZTimer.programmed_time = 1800000;  //30 minut;
 }
 
 uint8_t activateEZ(uint8_t EZ_pin_number_to_activate) {
