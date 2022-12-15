@@ -130,45 +130,63 @@ uint8_t doAction(uint8_t action_type, uint8_t ez_output_number) {
       //Para x przycisk 1 wciśnięty
       buttonActivityTimer.start_time = millis();
       if (buttonActivityTimer.active_flag != 1) {
+        for (uint8_t i = 0; i < EZ_COUNT; i++) {
+          digitalWrite(EZ_Pins[i], LOW);
+        }
         noInterrupts();
         activateREL();
         buttonActivityTimer.active_flag = 1;
+        pilotOffEZTimer.active_flag = 0;
         interrupts();
       }
       if (activateEZ(ez_output_number) != FOO_OK) ret = FOO_ERROR;
       break;
     case 2:
       //Para x przycisk 1 puszczony
+      for (uint8_t i = 0; i < EZ_COUNT; i++) {
+        digitalWrite(EZ_Pins[i], LOW);
+      }
       deactivateREL();
       if (deactivateEZ(ez_output_number) != FOO_OK) ret = FOO_ERROR;
       buttonActivityTimer.active_flag = 0;
+      pilotOffEZTimer.active_flag = 0;
       break;
     case 3:
       //Para x przycisk 2 wciśnięty
       button2ActivityTimer.start_time = millis();
       if (button2ActivityTimer.active_flag != 1) {
+        for (uint8_t i = 0; i < EZ_COUNT; i++) {
+          digitalWrite(EZ_Pins[i], LOW);
+        }
         if (activateEZ(ez_output_number) != FOO_OK) ret = FOO_ERROR;
         if (activateEZ(6) != FOO_OK) ret = FOO_ERROR;
         button2ActivityTimer.active_flag = 1;
       }
+      pilotOffEZTimer.active_flag = 0;
       break;
     case 4:
       //Para x przycisk 2 puszczony
+      for (uint8_t i = 0; i < EZ_COUNT; i++) {
+        digitalWrite(EZ_Pins[i], LOW);
+      }
       if (deactivateEZ(ez_output_number) != FOO_OK) ret = FOO_ERROR;
       if (deactivateEZ(6) != FOO_OK) ret = FOO_ERROR;
       button2ActivityTimer.active_flag = 0;
+      pilotOffEZTimer.active_flag = 0;
       break;
     case 5:
       //pilot on cmd
       for (uint8_t i = 0; i < EZ_COUNT; i++) {
         digitalWrite(EZ_Pins[i], LOW);
       }
+      pilotOffEZTimer.active_flag = 0;
       break;
     case 6:
       //pilot off cmd
       for (uint8_t i = 0; i < EZ_COUNT; i++) {
         digitalWrite(EZ_Pins[i], HIGH);
       }
+      pilotOffEZTimer.start_time = millis();
       pilotOffEZTimer.active_flag = 1;
       break;
     default:
@@ -219,6 +237,7 @@ void initializeData(void) {
   buttonActivityTimer.programmed_time = 1000;
   button2ActivityTimer.programmed_time = 1000;
   menuActivityTimer.programmed_time = 30000;
+  //pilotOffEZTimer.programmed_time = 18000;  //30 minut;
   pilotOffEZTimer.programmed_time = 1800000;  //30 minut;
 }
 
