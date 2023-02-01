@@ -11,6 +11,7 @@
 
 //variable definitions
 #define CMD_ENTER_CONFIG "CEDIT"
+#define CMD_EDIT_EZ_TIME "EZTEDIT"
 #define USB_BAUDRATE 115200
 #define FOO_OK 1
 #define FOO_ERROR 0
@@ -75,17 +76,18 @@ void pilotOffSequence(void);
 
 void setup() {
   initalizeGPIO();
-  initializeData();
-  Serial.begin(USB_BAUDRATE);
   EEPROM.begin(EEPROM_SIZE);
+  Serial.begin(USB_BAUDRATE);
+  Serial.println("I`m alive");
+  Serial.println("I`m alive");
+  Serial.println("I`m alive\n");
+  initializeData();
   WiFi.mode(WIFI_STA);
   esp_now_init();
   esp_now_set_self_role(ESP_NOW_ROLE_SLAVE);
   esp_now_register_recv_cb(OnDataRecv);
 #ifdef DEBUG
-  Serial.println("I`m alive");
-  Serial.println("I`m alive");
-  Serial.println("I`m alive\n");
+  
 #endif
 }
 
@@ -238,7 +240,13 @@ void initializeData(void) {
   button2ActivityTimer.programmed_time = 1000;
   menuActivityTimer.programmed_time = 30000;
   //pilotOffEZTimer.programmed_time = 18000;  //30 minut;
-  pilotOffEZTimer.programmed_time = 1800000;  //30 minut;
+  //pilotOffEZTimer.programmed_time = 1800000;  //30 minut;
+  uint8_t eeprom_val = 0;
+  EEPROM.get(0, eeprom_val);
+  Serial.print("EEPROM time val: ");
+  Serial.println(eeprom_val);
+  pilotOffEZTimer.programmed_time = (eeprom_val * 60000);
+
 }
 
 uint8_t activateEZ(uint8_t EZ_pin_number_to_activate) {
@@ -316,6 +324,26 @@ void turnOnboardLedOff(void) {
 void checkForUserInput(void) {
   String cmd_cmp;
   String someText;
+  if (Serial.available()) {
+    String input_string = Serial.readString();
+    Serial.print(">");
+    Serial.print(input_string);
+    cmd_cmp = input_string.substring(0, input_string.indexOf(' ', 0));
+    if (cmd_cmp == CMD_EDIT_EZ_TIME) {
+      String data_cmp = ((input_string.substring((input_string.indexOf(' ', 0) + 1), '\n')));
+      uint8_t data_value = data_cmp.toInt();
+      if (data_value > 0) {
+        EEPROM.put(0, data_value);
+        EEPROM.commit();
+        pilotOffEZTimer.programmed_time = (data_value * 60000);
+        Serial.println("Timings succesfully changed!");
+        Serial.print("Time set:");
+        Serial.println(data_value);
+      } else Serial.println("Incorrect timing data");
+    } else Serial.println("Such command doesn`t exist");
+  }
+
+  /*
   if (Serial.available()) {
     someText = Serial.readString();
     Serial.print(">");
@@ -395,6 +423,7 @@ void checkForUserInput(void) {
       }
     }
   }
+  */
 }
 
 void readConfigFromEEPROM(void) {
